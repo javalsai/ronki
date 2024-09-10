@@ -7,7 +7,7 @@ use serenity::{model::channel::Message, prelude::*};
 
 lazy_static! {
     pub static ref COMMAND_LIST: [Arc<dyn Command>; 1] = [
-        Arc::new(list::Command::default()),
+        Arc ::new(list::Command),
     ];
 }
 
@@ -36,10 +36,6 @@ mod list {
         ) {
         }
     }
-}
-
-pub enum DataType {
-    String(String),
 }
 
 pub trait Command: Send + Sync {

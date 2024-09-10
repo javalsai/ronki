@@ -31,7 +31,7 @@ impl<'a> MsgParser<'a> {
                 }
             };
 
-            if let Some(_) = local_parser.push_chars(&mut line_iter.peekable())? {
+            if local_parser.push_chars(&mut line_iter.peekable())?.is_some() {
                 return Err(ParseError::IllegalRootUnnest);
             }
 
@@ -230,7 +230,7 @@ impl ParseCtxType {
 
                         let byte_val = u8::from_str_radix(&format!("{chars}{new_char}"), 16)
                             .map_err(|_| ParseError::InvalidEscapeSequence)?;
-                        return Ok((ParseAction::Push(ShellArg::Byte(byte_val)), false));
+                        Ok((ParseAction::Push(ShellArg::Byte(byte_val)), false))
                     }
                     'u' => {
                         if escape.len() > 11 {
@@ -292,14 +292,15 @@ impl ParseCtxType {
 
 impl ParseCtx {
     pub fn new(typ: ParseCtxType) -> Self {
-        let mut myself = Self::default();
-        myself.typ = typ;
-        myself
+        Self {
+            typ,
+            ..Default::default()
+        }
     }
 
     pub fn from_chars(iter: &mut impl Iterator<Item = char>) -> Result<ShellArgs, ParseError> {
         let mut new_ctx = Self::default();
-        if let Some(_) = new_ctx.push_chars(&mut iter.peekable())? {
+        if new_ctx.push_chars(&mut iter.peekable())?.is_some() {
             return Err(ParseError::IllegalRootUnnest);
         }
         new_ctx.forced_close()

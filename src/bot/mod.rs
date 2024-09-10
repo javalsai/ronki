@@ -74,7 +74,7 @@ impl<T: surrealdb::Connection> EventHandler for Handler<T> {
 
         match a {
             Ok(a) => {
-                if a.len() > 0 {
+                if !a.is_empty() {
                     let mut dmmy = DummyEnvironExecuter::default();
                     let _ = msg.reply(&ctx.http, format!("`{:?}`", a.clone())).await;
                     for cmd in a {
