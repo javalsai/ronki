@@ -1,0 +1,11 @@
+token = "PUT HERE YOUR TOKEN"
+
+# prefix = '!'
+
+# owners = [ ]
+# servers = [ ]
+
+[surrealdb]
+address = "127.0.0.1:8000"
+username = "root"
+password = "root"
