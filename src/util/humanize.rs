@@ -5,16 +5,28 @@ pub mod units {
         use super::*;
         use std::fmt::Display;
 
-        pub fn bytes_to_metric<T: Normalizable + From<u16> + Display>(amount: T) -> String {
+        pub fn bytes_to_metric<T: Normalizable + From<u16> + Display>(
+            amount: T,
+            prec: usize,
+        ) -> String {
             let (amount, magnitude_idx) =
                 normalize_magnitude_metric(amount, MAGNITUDE_PREFIX_METRIC.len() - 1);
-            format!("{amount} {}B", MAGNITUDE_PREFIX_METRIC[magnitude_idx])
+            format!(
+                "{amount:.prec$} {}B",
+                MAGNITUDE_PREFIX_METRIC[magnitude_idx]
+            )
         }
 
-        pub fn bytes_to_binary<T: Normalizable + From<u16> + Display>(amount: T) -> String {
+        pub fn bytes_to_binary<T: Normalizable + From<u16> + Display>(
+            amount: T,
+            prec: usize,
+        ) -> String {
             let (amount, magnitude_idx) =
                 normalize_magnitude_binary(amount, MAGNITUDE_PREFIX_BINARY.len() - 1);
-            format!("{amount} {}B", MAGNITUDE_PREFIX_BINARY[magnitude_idx])
+            format!(
+                "{amount:.prec$} {}B",
+                MAGNITUDE_PREFIX_BINARY[magnitude_idx]
+            )
         }
     }
 
@@ -24,11 +36,17 @@ pub mod units {
     pub static MAGNITUDE_PREFIX_METRIC: &[&str] = &["", "K", "M", "G", "T", "P", "E", "Z"];
     pub static MAGNITUDE_PREFIX_BINARY: &[&str] = &["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"];
 
-    pub fn normalize_magnitude_metric<T: Normalizable + From<u16>>(amount: T, max_idx: usize) -> (T, usize) {
+    pub fn normalize_magnitude_metric<T: Normalizable + From<u16>>(
+        amount: T,
+        max_idx: usize,
+    ) -> (T, usize) {
         normalize_magnitude(amount, T::from(1000), max_idx)
     }
 
-    pub fn normalize_magnitude_binary<T: Normalizable + From<u16>>(amount: T, max_idx: usize) -> (T, usize) {
+    pub fn normalize_magnitude_binary<T: Normalizable + From<u16>>(
+        amount: T,
+        max_idx: usize,
+    ) -> (T, usize) {
         normalize_magnitude(amount, T::from(1024), max_idx)
     }
 

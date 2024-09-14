@@ -1,6 +1,11 @@
 // Spaghetti code 😬
 
-use std::{ffi::OsString, iter::Peekable, mem::take, os::unix::ffi::OsStringExt};
+use std::{
+    ffi::{OsStr, OsString},
+    iter::Peekable,
+    mem::take,
+    os::unix::ffi::OsStringExt,
+};
 
 pub struct MsgParser<'a> {
     prefix: &'a str,
@@ -31,7 +36,10 @@ impl<'a> MsgParser<'a> {
                 }
             };
 
-            if local_parser.push_chars(&mut line_iter.peekable())?.is_some() {
+            if local_parser
+                .push_chars(&mut line_iter.peekable())?
+                .is_some()
+            {
                 return Err(ParseError::IllegalRootUnnest);
             }
 
@@ -52,47 +60,55 @@ impl<'a> MsgParser<'a> {
     }
 }
 
-pub trait Environ {
-    // TODO: return Option<&OsStr> as soon as we remove the dummy impl
-    //  ( the reference should be valid for all Environ's lifetime, and this
-    //  one would keep track of those internally ig )
-    fn get(&mut self, key: &str) -> Option<OsString>;
+pub trait Environ<'a> {
+    fn get(&self, key: &str) -> Option<&OsStr>;
+    fn set(&mut self, key: String, value: OsString) -> Option<OsString>;
+
+    fn entries(&self) -> impl Iterator<Item = (&str, &OsStr)>;
 }
 
-pub trait Executer {
-    fn execute(&mut self, args: Vec<OsString>, env: &mut impl Environ) -> OsString;
+pub trait Executer<E> {
+    fn execute<'a>(
+        &mut self,
+        args: Vec<OsString>,
+        env: &mut impl Environ<'a>,
+    ) -> Result<OsString, E>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExecuteError {
+pub enum ExecuteError<E> {
     NoSuchEnv,
+    ExecuterError(E),
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ShellArgs(Vec<Vec<ShellArg>>);
 
 impl ShellArgs {
-    pub fn resolve(
+    pub fn resolve<'a, E>(
         self,
-        environ: &mut impl Environ,
-        executer: &mut impl Executer,
-    ) -> Result<OsString, ExecuteError> {
+        environ: &mut impl Environ<'a>,
+        executer: &mut impl Executer<E>,
+    ) -> Result<OsString, ExecuteError<E>> {
         let arg_list: Vec<_> = self
             .0
             .into_iter()
-            .map(|arg| -> Result<OsString, ExecuteError> {
+            .map(|arg| -> Result<OsString, ExecuteError<E>> {
                 let mut arg_string = OsString::new();
+
                 arg.into_iter()
-                    .try_for_each(|component| -> Result<(), ExecuteError> {
+                    .try_for_each(|component| -> Result<(), ExecuteError<E>> {
+                        let b = &mut *environ;
                         match component {
                             ShellArg::Byte(byte) => arg_string.push(OsString::from_vec(vec![byte])),
                             ShellArg::Char(ch) => arg_string.push(ch.to_string()),
                             ShellArg::RawString(rstring) => arg_string.push(rstring),
                             ShellArg::String(string) => arg_string.push(string),
-                            ShellArg::EnvVar(env_ref) => arg_string
-                                .push(environ.get(&env_ref).ok_or(ExecuteError::NoSuchEnv)?),
+                            ShellArg::EnvVar(env_ref) => {
+                                arg_string.push(b.get(&env_ref).ok_or(ExecuteError::NoSuchEnv)?)
+                            }
                             ShellArg::Subshell(args) => {
-                                arg_string.push(args.resolve(environ, executer)?)
+                                arg_string.push(args.resolve(&mut *b, executer)?)
                             }
                         };
                         Ok(())
@@ -101,7 +117,9 @@ impl ShellArgs {
             })
             .try_collect()?;
 
-        Ok(executer.execute(arg_list, environ))
+        executer
+            .execute(arg_list, environ)
+            .map_err(ExecuteError::ExecuterError)
     }
 }
 

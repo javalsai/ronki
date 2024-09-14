@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use serenity::model::id::{UserId, GuildId};
+use serenity::model::id::{GuildId, UserId};
 
 #[derive(Deserialize, Debug)]
 pub struct SurrealDB {
@@ -20,4 +20,6 @@ pub struct Schema {
     pub surrealdb: SurrealDB,
 }
 
-fn __default_prefix() -> char { '!' }
+fn __default_prefix() -> char {
+    '!'
+}

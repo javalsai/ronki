@@ -2,7 +2,8 @@
     generic_arg_infer,
     iterator_try_collect,
     iter_intersperse,
-    yeet_expr,
+    slice_split_once,
+    yeet_expr
 )]
 
 pub mod args;
