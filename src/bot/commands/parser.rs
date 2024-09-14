@@ -40,7 +40,7 @@ impl<'a> MsgParser<'a> {
                 .push_chars(&mut line_iter.peekable())?
                 .is_some()
             {
-                return Err(ParseError::IllegalRootUnnest);
+                do yeet ParseError::IllegalRootUnnest;
             }
 
             match local_parser.close()? {
@@ -53,7 +53,7 @@ impl<'a> MsgParser<'a> {
         }
 
         if parser.is_some() {
-            return Err(ParseError::UnfinishedLastCommand);
+            do yeet ParseError::UnfinishedLastCommand;
         }
 
         Ok(shell_commands)
@@ -217,7 +217,7 @@ impl ParseCtxType {
     pub fn escape(&self, escape: &str, new_char: char) -> Result<(ParseAction, bool), ParseError> {
         let mut chars_iter = escape.chars();
         let Some(escape_type) = chars_iter.next() else {
-            return Err(ParseError::InvalidEscapeSequence);
+            do yeet ParseError::InvalidEscapeSequence;
         };
 
         match escape_type {
@@ -239,7 +239,7 @@ impl ParseCtxType {
                 match discriminator {
                     'x' => {
                         if escape.len() > 3 {
-                            return Err(ParseError::InvalidEscapeSequence);
+                            do yeet ParseError::InvalidEscapeSequence;
                         }
 
                         let Some(chars) = chars_iter.next() else {
@@ -252,7 +252,7 @@ impl ParseCtxType {
                     }
                     'u' => {
                         if escape.len() > 11 {
-                            return Err(ParseError::InvalidEscapeSequence);
+                            do yeet ParseError::InvalidEscapeSequence;
                         }
 
                         if new_char != '}' {
@@ -260,7 +260,7 @@ impl ParseCtxType {
                         }
 
                         let Some('{') = chars_iter.next() else {
-                            return Err(ParseError::InvalidEscapeSequence);
+                            do yeet ParseError::InvalidEscapeSequence;
                         };
 
                         let value: String = chars_iter.collect();
@@ -319,7 +319,7 @@ impl ParseCtx {
     pub fn from_chars(iter: &mut impl Iterator<Item = char>) -> Result<ShellArgs, ParseError> {
         let mut new_ctx = Self::default();
         if new_ctx.push_chars(&mut iter.peekable())?.is_some() {
-            return Err(ParseError::IllegalRootUnnest);
+            do yeet ParseError::IllegalRootUnnest;
         }
         new_ctx.forced_close()
     }
@@ -331,7 +331,7 @@ impl ParseCtx {
         while let Some(ch) = iter.next() {
             if let Some(args) = self.push_char(ch)? {
                 if iter.peek().is_some() {
-                    return Err(ParseError::IllegalRootUnnest);
+                     do yeet ParseError::IllegalRootUnnest;
                 }
                 return Ok(Some(args));
             };
@@ -367,7 +367,7 @@ impl ParseCtx {
         match act {
             ParseAction::Nest(ctx_typ) => *self.nesting = Some(Self::new(ctx_typ)),
             ParseAction::Unnest => match *self.nesting {
-                Some(_) => return Err(ParseError::IllegalRootUnnest),
+                Some(_) => do yeet ParseError::IllegalRootUnnest,
                 None => {
                     return Ok(Some(self.forced_close()?));
                 }
@@ -395,7 +395,7 @@ impl ParseCtx {
 
     pub fn close(&mut self) -> Result<Option<ShellArgs>, ParseError> {
         if self.nesting.is_some() {
-            return Err(ParseError::IllegalRootUnnest);
+            do yeet ParseError::IllegalRootUnnest;
         }
 
         match self.escape.as_ref() {
