@@ -1,4 +1,5 @@
 // Spaghetti code 😬
+// such a mess ong
 
 use std::{
     ffi::{OsStr, OsString},
@@ -60,25 +61,53 @@ impl<'a> MsgParser<'a> {
     }
 }
 
-pub trait Environ<'a> {
-    fn get(&self, key: &str) -> Option<&OsStr>;
-    fn set(&mut self, key: String, value: OsString) -> Option<OsString>;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EnvironValue {
+    None,
+    String(OsString),
+    Blob(Vec<u8>),
+    Number(i128),
+    UNumber(u128),
+}
 
-    fn entries(&self) -> impl Iterator<Item = (&str, &OsStr)>;
+impl EnvironValue {
+    pub fn as_string(self) -> Option<OsString> {
+        match self {
+            Self::None => Some(OsString::new()),
+            Self::String(value) => Some(value),
+            Self::Number(n) => Some(OsString::from(n.to_string())),
+            Self::UNumber(n) => Some(OsString::from(n.to_string())),
+            _ => None
+        }
+    }
+}
+
+impl From<&str> for EnvironValue {
+    fn from(value: &str) -> Self {
+        Self::String(OsString::from(value))
+    }
+}
+
+pub trait Environ<'a> {
+    fn get(&self, key: &str) -> Option<&EnvironValue>;
+    fn set(&mut self, key: String, value: EnvironValue) -> Option<EnvironValue>;
+
+    fn entries(&self) -> impl Iterator<Item = (&str, &EnvironValue)>;
 }
 
 pub trait Executer<E> {
     fn execute<'a>(
         &mut self,
-        args: Vec<OsString>,
+        args: Vec<EnvironValue>,
         env: &mut impl Environ<'a>,
-    ) -> Result<OsString, E>;
+    ) -> Result<EnvironValue, E>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecuteError<E> {
     NoSuchEnv,
     ExecuterError(E),
+    UnserializableValue,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -89,31 +118,47 @@ impl ShellArgs {
         self,
         environ: &mut impl Environ<'a>,
         executer: &mut impl Executer<E>,
-    ) -> Result<OsString, ExecuteError<E>> {
+    ) -> Result<EnvironValue, ExecuteError<E>> {
         let arg_list: Vec<_> = self
             .0
             .into_iter()
-            .map(|arg| -> Result<OsString, ExecuteError<E>> {
-                let mut arg_string = OsString::new();
+            .map(|mut arg| -> Result<EnvironValue, ExecuteError<E>> {
+                if arg.len() <= 1 {
+                    if let ShellArg::EnvVar(value) = &arg[0] {
+                        return Ok(environ.get(&value).ok_or(ExecuteError::NoSuchEnv)?.clone());
+                    };
+                    if let ShellArg::Subshell(_) = &arg[0] {
+                        if let ShellArg::Subshell(args) = arg.remove(0) {
+                            return args.resolve(&mut *environ, executer);
+                        };
+                    };
+                }
 
+                let mut arg_string = OsString::new();
                 arg.into_iter()
                     .try_for_each(|component| -> Result<(), ExecuteError<E>> {
-                        let b = &mut *environ;
                         match component {
                             ShellArg::Byte(byte) => arg_string.push(OsString::from_vec(vec![byte])),
                             ShellArg::Char(ch) => arg_string.push(ch.to_string()),
                             ShellArg::RawString(rstring) => arg_string.push(rstring),
                             ShellArg::String(string) => arg_string.push(string),
-                            ShellArg::EnvVar(env_ref) => {
-                                arg_string.push(b.get(&env_ref).ok_or(ExecuteError::NoSuchEnv)?)
-                            }
-                            ShellArg::Subshell(args) => {
-                                arg_string.push(args.resolve(&mut *b, executer)?)
-                            }
+                            ShellArg::EnvVar(env_ref) => arg_string.push(
+                                environ
+                                    .get(&env_ref)
+                                    .ok_or(ExecuteError::NoSuchEnv)?
+                                    .clone()
+                                    .as_string()
+                                    .ok_or(ExecuteError::UnserializableValue)?,
+                            ),
+                            ShellArg::Subshell(args) => arg_string.push(
+                                args.resolve(&mut *environ, executer)?
+                                    .as_string()
+                                    .ok_or(ExecuteError::UnserializableValue)?,
+                            ),
                         };
                         Ok(())
                     })?;
-                Ok(arg_string)
+                Ok(EnvironValue::String(arg_string))
             })
             .try_collect()?;
 
@@ -331,7 +376,7 @@ impl ParseCtx {
         while let Some(ch) = iter.next() {
             if let Some(args) = self.push_char(ch)? {
                 if iter.peek().is_some() {
-                     do yeet ParseError::IllegalRootUnnest;
+                    do yeet ParseError::IllegalRootUnnest;
                 }
                 return Ok(Some(args));
             };

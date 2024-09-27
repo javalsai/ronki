@@ -23,7 +23,14 @@ impl<T: surrealdb::Connection> EventHandler for Handler<T> {
                     //let _ = msg.reply(&ctx.http, format!("`{:?}`", a.clone())).await;
 
                     let mut environ = commands::DefaultEnviron::default();
-                    environ.insert(String::from("USER"), OsString::from(&msg.author.name));
+                    environ.insert(
+                        String::from("USER"),
+                        commands::parser::EnvironValue::String(OsString::from(&msg.author.name)),
+                    );
+                    environ.insert(
+                        String::from("USERID"),
+                        commands::parser::EnvironValue::UNumber(msg.author.id.get() as u128)
+                    );
 
                     let mut executer = commands::HardcodedExecuter;
 
@@ -31,6 +38,10 @@ impl<T: surrealdb::Connection> EventHandler for Handler<T> {
                     for cmd in cmds {
                         match cmd.resolve(&mut environ, &mut executer) {
                             Ok(cmd_output) => {
+                                let Some(cmd_output) = cmd_output.as_string() else {
+                                    let _ = msg.reply(&ctx.http, "**err**: Unserializable Output");
+                                    return;
+                                };
                                 if !cmd_output.is_empty() {
                                     output += cmd_output.to_string_lossy().as_ref();
                                     output += "\n";

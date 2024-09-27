@@ -12,18 +12,18 @@ use std::{
 use procfs::WithCurrentSystemInfo;
 use serenity::{model::channel::Message, prelude::*};
 
-pub type DefaultEnviron<'a> = HashMap<String, OsString>;
+pub type DefaultEnviron<'a> = HashMap<String, parser::EnvironValue>;
 impl<'a> parser::Environ<'a> for DefaultEnviron<'a> {
-    fn get(&self, key: &str) -> Option<&OsStr> {
-        self.get(key).map(move |dat| dat.as_os_str())
+    fn get(&self, key: &str) -> Option<&parser::EnvironValue> {
+        self.get(key)
     }
 
-    fn set(&mut self, key: String, value: OsString) -> Option<OsString> {
+    fn set(&mut self, key: String, value: parser::EnvironValue) -> Option<parser::EnvironValue> {
         self.insert(key, value)
     }
 
-    fn entries(&self) -> impl Iterator<Item = (&str, &OsStr)> {
-        self.iter().map(|(k, v)| (k.as_str(), v.as_os_str()))
+    fn entries(&self) -> impl Iterator<Item = (&str, &parser::EnvironValue)> {
+        self.iter().map(|(k, v)| (k.as_str(), v))
     }
 }
 
@@ -59,19 +59,24 @@ pub enum HardcodedExecuterError {
     // ig they'll have a common trait for display
     // aaand, be a dyn prob
     CommandError(&'static str),
+    NoStringCommandName,
+    UnserializableValue,
 }
 
 impl parser::Executer<HardcodedExecuterError> for HardcodedExecuter {
     fn execute<'a>(
         &mut self,
-        args: Vec<OsString>,
+        mut args: Vec<parser::EnvironValue>,
         env: &mut impl parser::Environ<'a>,
-    ) -> Result<OsString, HardcodedExecuterError> {
-        let cmd = args.first().ok_or(HardcodedExecuterError::NoCommandName)?;
+    ) -> Result<parser::EnvironValue, HardcodedExecuterError> {
+        let parser::EnvironValue::String(cmd) =
+            args.first().ok_or(HardcodedExecuterError::NoCommandName)?
+        else {
+            do yeet HardcodedExecuterError::NoStringCommandName;
+        };
         let cmd = cmd
             .to_str()
             .ok_or(HardcodedExecuterError::ImproperEncoding)?;
-        let args = &args[1..];
 
         match cmd {
             "help" => Ok(concat!(
@@ -81,15 +86,26 @@ impl parser::Executer<HardcodedExecuterError> for HardcodedExecuter {
                 "  'echo': Echo 👍\n",
                 "  'env': List env variables\n",
                 "  'let': Define an env variable\n",
-                "  'memusage': Print memory usage",
+                "  'printargs': Prints arguments\n",
+                "  'memusage': Print memory usage\n",
+                "  'music': Full separate music handler",
             )
             .into()),
-            "echo" => Ok(args.iter().intersperse(&OsString::from(" ")).fold(
-                OsString::new(),
-                |mut acc, v| {
-                    acc.push(v);
-                    acc
-                },
+            "echo" => Ok(parser::EnvironValue::String(
+                args.into_iter()
+                    .skip(1)
+                    .map(|v| {
+                        v.as_string()
+                            .ok_or(HardcodedExecuterError::UnserializableValue)
+                    })
+                    .try_collect::<Vec<_>>()? // I hate this, but idk, no try_map and idwanna do
+                    // mine
+                    .iter()
+                    .intersperse(&OsString::from(" "))
+                    .fold(OsString::new(), |mut acc, v| {
+                        acc.push(v);
+                        acc
+                    }),
             )),
             "env" => {
                 let result = env
@@ -101,15 +117,17 @@ impl parser::Executer<HardcodedExecuterError> for HardcodedExecuter {
                         acc
                     });
 
-                Ok(result)
+                Ok(parser::EnvironValue::String(result))
             }
             "let" => {
-                if args.len() != 1 {
+                if args.len() != 2 {
                     do yeet HardcodedExecuterError::CommandError("invalid arg count")
                 }
-                let Some(expr) = args.first() else {
-                    do yeet HardcodedExecuterError::CommandError("wtf")
-                };
+
+                let expr = args
+                    .remove(1)
+                    .as_string()
+                    .ok_or(HardcodedExecuterError::UnserializableValue)?;
 
                 let (k, v) = expr
                     .as_encoded_bytes()
@@ -122,22 +140,41 @@ impl parser::Executer<HardcodedExecuterError> for HardcodedExecuter {
 
                 let v = OsString::from_vec(v.to_vec());
 
-                env.set(k, v);
+                env.set(k, parser::EnvironValue::String(v)); // no v=$(stuff) btw
 
-                Ok(OsString::new())
+                Ok(parser::EnvironValue::None)
+            }
+            "printargs" => {
+                Ok(parser::EnvironValue::String(OsString::from(format!("{args:?}"))))
             }
             "memusage" => {
                 let me = procfs::process::Process::myself().unwrap();
                 let stat = me.stat().unwrap();
 
-                Ok(OsString::from(format!(
+                Ok(parser::EnvironValue::String(OsString::from(format!(
                     "pid({}): rss({}) vsize({})",
                     stat.pid,
                     sizes::bytes_to_binary(stat.rss_bytes().get() as f64, 2),
                     sizes::bytes_to_binary(stat.vsize as f64, 2),
-                )))
+                ))))
+            }
+            "music" => {
+                let Some(nice_args): Option<Vec<String>> = args[1..].into_iter().map(|osstr| {
+                    let parser::EnvironValue::String(osstr) = osstr else { return None; };
+                    osstr.clone().into_string().ok()
+                }).try_collect() else {
+                    return Ok(parser::EnvironValue::String(OsString::from("invalid encoding argument")))
+                };
+                let response = hardcoded_music_player::main_handler(nice_args.as_slice());
+                Ok(parser::EnvironValue::String(OsString::from(response)))
             }
             _ => Err(HardcodedExecuterError::UnknownCommand),
         }
+    }
+}
+
+pub mod hardcoded_music_player {
+    pub fn main_handler(args: &[String]) -> String {
+        String::new()
     }
 }
