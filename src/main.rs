@@ -2,6 +2,7 @@
     generic_arg_infer,
     iterator_try_collect,
     iter_intersperse,
+    non_lifetime_binders,
     slice_split_once,
     yeet_expr
 )]

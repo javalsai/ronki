@@ -1,4 +1,4 @@
-pub mod commands;
+pub mod commands_legacy;
 
 use std::ffi::OsString;
 
@@ -12,9 +12,10 @@ struct Handler<T: surrealdb::Connection> {
 
 #[async_trait]
 impl<T: surrealdb::Connection> EventHandler for Handler<T> {
-    async fn message(&self, ctx: Context, msg: Message) {
+    async fn message(&self, mut ctx: Context, mut msg: Message) {
         let maybe_cmds =
-            commands::parser::MsgParser::new(&self.config.prefix.to_string(), &msg.content).parse();
+            commands_legacy::parser::MsgParser::new(&self.config.prefix.to_string(), &msg.content)
+                .parse();
 
         match maybe_cmds {
             Ok(cmds) => {
@@ -22,17 +23,29 @@ impl<T: surrealdb::Connection> EventHandler for Handler<T> {
                     // TODO: make debug/trace log macro
                     //let _ = msg.reply(&ctx.http, format!("`{:?}`", a.clone())).await;
 
-                    let mut environ = commands::DefaultEnviron::default();
+                    let mut environ = commands_legacy::DefaultEnviron::default();
+                    environ.insert(
+                        String::from("MSGID"),
+                        commands_legacy::parser::EnvironValue::UNumber(msg.id.get() as u128),
+                    );
                     environ.insert(
                         String::from("USER"),
-                        commands::parser::EnvironValue::String(OsString::from(&msg.author.name)),
+                        commands_legacy::parser::EnvironValue::String(OsString::from(
+                            &msg.author.name,
+                        )),
                     );
                     environ.insert(
                         String::from("USERID"),
-                        commands::parser::EnvironValue::UNumber(msg.author.id.get() as u128)
+                        commands_legacy::parser::EnvironValue::UNumber(msg.author.id.get() as u128),
                     );
+                    if let Some(guild_id) = msg.guild_id {
+                        environ.insert(
+                            String::from("GUILDID"),
+                            commands_legacy::parser::EnvironValue::UNumber(guild_id.get() as u128),
+                        );
+                    };
 
-                    let mut executer = commands::HardcodedExecuter;
+                    let mut executer = commands_legacy::DynamicExecuter(&mut ctx, &mut msg);
 
                     let mut output = String::new();
                     for cmd in cmds {

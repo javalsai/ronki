@@ -42,10 +42,48 @@ pub trait Command: Send + Sync {
     {
         Self::default()
     }
-    fn run(&self, args: Self::Args, ctx: Context, msg: Message)
-    where
-        Self: Sized;
+    fn run(
+        &self,
+        args: Vec<parser::EnvironValue>,
+        ctx: &mut Context,
+        msg: &mut Message,
+    ) -> parser::EnvironValue;
 }
+
+// ----
+
+pub struct DynamicExecuter<'a>(pub &'a mut Context, pub &'a mut Message);
+
+#[derive(Debug)]
+pub enum DynamicExecuterError {
+    NoCommandName,
+    InvalidCommandName,
+    CommandNotFound,
+}
+
+impl<'a> parser::Executer<DynamicExecuterError> for DynamicExecuter<'a> {
+    fn execute<'b>(
+        &mut self,
+        args: Vec<parser::EnvironValue>,
+        env: &mut impl parser::Environ<'b>,
+    ) -> Result<parser::EnvironValue, DynamicExecuterError> {
+        let parser::EnvironValue::String(cmd) =
+            args.first().ok_or(DynamicExecuterError::NoCommandName)?
+        else {
+            do yeet DynamicExecuterError::InvalidCommandName;
+        };
+
+        let cmd = cmd
+            .to_str()
+            .ok_or(DynamicExecuterError::InvalidCommandName)?;
+
+        let cmd = list::COMMAND_MAP.get(cmd);
+        let cmd = cmd.ok_or(DynamicExecuterError::CommandNotFound)?;
+        Ok(cmd.run(args, self.0, self.1))
+    }
+}
+
+// ----
 
 #[derive(Default)]
 pub struct HardcodedExecuter;
@@ -144,9 +182,9 @@ impl parser::Executer<HardcodedExecuterError> for HardcodedExecuter {
 
                 Ok(parser::EnvironValue::None)
             }
-            "printargs" => {
-                Ok(parser::EnvironValue::String(OsString::from(format!("{args:?}"))))
-            }
+            "printargs" => Ok(parser::EnvironValue::String(OsString::from(format!(
+                "{args:?}"
+            )))),
             "memusage" => {
                 let me = procfs::process::Process::myself().unwrap();
                 let stat = me.stat().unwrap();
@@ -159,11 +197,19 @@ impl parser::Executer<HardcodedExecuterError> for HardcodedExecuter {
                 ))))
             }
             "music" => {
-                let Some(nice_args): Option<Vec<String>> = args[1..].into_iter().map(|osstr| {
-                    let parser::EnvironValue::String(osstr) = osstr else { return None; };
-                    osstr.clone().into_string().ok()
-                }).try_collect() else {
-                    return Ok(parser::EnvironValue::String(OsString::from("invalid encoding argument")))
+                let Some(nice_args): Option<Vec<String>> = args[1..]
+                    .into_iter()
+                    .map(|osstr| {
+                        let parser::EnvironValue::String(osstr) = osstr else {
+                            return None;
+                        };
+                        osstr.clone().into_string().ok()
+                    })
+                    .try_collect()
+                else {
+                    return Ok(parser::EnvironValue::String(OsString::from(
+                        "invalid encoding argument",
+                    )));
                 };
                 let response = hardcoded_music_player::main_handler(nice_args.as_slice());
                 Ok(parser::EnvironValue::String(OsString::from(response)))
@@ -175,6 +221,7 @@ impl parser::Executer<HardcodedExecuterError> for HardcodedExecuter {
 
 pub mod hardcoded_music_player {
     pub fn main_handler(args: &[String]) -> String {
-        String::new()
+        format!("args btw {args:?}")
+        //String::new()
     }
 }

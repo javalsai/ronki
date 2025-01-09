@@ -22,6 +22,8 @@ lazy_static = "1.5.0"
 procfs = "0.16.0"
 serde = "1.0.210"
 serenity = "0.12.2"
+songbird = { version = "0.4.3", features = ["builtin-queue"] }
 surrealdb = "1.5.4"
+symphonia = { version = "0.5.4", features = ["aac", "mp3", "isomp4", "alac"] }
 tokio = "1.40.0"
 toml = "0.8.19"
